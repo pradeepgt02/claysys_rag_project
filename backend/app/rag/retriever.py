@@ -120,8 +120,26 @@ def retrieve_relevant_chunks(
                 "content_type": meta.get("content_type", "html"),
                 "page_number": meta.get("page_number"),
                 "chunk_index": meta.get("chunk_index", 0),
-                "similarity_score": round(similarity_score, 4)
+                "similarity_score": round(similarity_score, 4),
+                "score": round(similarity_score, 4)
             })
+
+        # Add intent-aware citation boosting
+        intent_words = {"download", "install", "setup", "get", "link", "url"}
+        boost_urls = {"download", "downloads", "install", "installer", "setup", "get-started"}
+        
+        question_lower = question.lower()
+        has_intent = any(word in question_lower for word in intent_words)
+        
+        if has_intent:
+            for item in results:
+                url_lower = item["source_url"].lower()
+                if any(boost_word in url_lower for boost_word in boost_urls):
+                    item["score"] = round(item["score"] + 0.5, 4)
+                    item["similarity_score"] = item["score"]
+
+        # Sort retrieved chunks by score descending before returning them
+        results.sort(key=lambda x: x["score"], reverse=True)
 
         return {
             "success": True,

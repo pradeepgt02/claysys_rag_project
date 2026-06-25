@@ -66,10 +66,14 @@ export const useWorkspaceStore = () => {
     });
   }, []);
 
-  const updateConversation = useCallback((id: string, updater: (conv: ChatConversation) => ChatConversation) => {
+  const updateConversation = useCallback((id: string, updater: ((conv: ChatConversation) => ChatConversation) | Partial<ChatConversation>) => {
     setGlobalState({
       ...globalState,
-      conversations: globalState.conversations.map(c => c.id === id ? updater(c) : c),
+      conversations: globalState.conversations.map(c => 
+        c.id === id 
+          ? (typeof updater === 'function' ? updater(c) : { ...c, ...updater }) 
+          : c
+      ),
     });
   }, []);
 

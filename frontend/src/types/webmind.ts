@@ -30,9 +30,12 @@ export interface ChatRequest {
 }
 
 export interface Source {
-  url: string;
+  url?: string;
+  source_url?: string;
   title: string;
   heading: string;
+  score?: number;
+  is_primary_answer_source?: boolean;
 }
 
 export interface ChatResponse {
@@ -72,9 +75,14 @@ export interface ChatConversation {
   id: string;
   title: string;
   website_id: string;
+  websiteId?: string;
+  websiteDomain?: string;
   created_at: string;
   updated_at: string;
+  createdAt?: string;
+  updatedAt?: string;
   messages: ChatMessage[];
+  legacy_mixed?: boolean;
 }
 
 export interface WorkspaceState {
@@ -83,3 +91,25 @@ export interface WorkspaceState {
   selectedWebsiteId: string;
   selectedConversationId: string;
 }
+
+export interface IndexedPageInfo {
+  url: string;
+  title: string;
+  chunks_count: number;
+  status: string;
+}
+
+export interface IndexedPagesStats {
+  pages_indexed: number;
+  chunks_created: number;
+  vectors_stored: number;
+}
+
+export interface IndexedPagesResponse {
+  success: boolean;
+  website_id: string;
+  source_url: string;
+  stats: IndexedPagesStats;
+  pages: IndexedPageInfo[];
+}
+

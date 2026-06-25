@@ -1,4 +1,4 @@
-import { IngestRequest, IngestResponse, ChatRequest, ChatResponse } from '../types/webmind';
+import { IngestRequest, IngestResponse, ChatRequest, ChatResponse, IndexedPagesResponse } from '../types/webmind';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
 
@@ -89,6 +89,41 @@ export const webmindApi = {
       }
       if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
         throw new ApiError('Lost connection to the backend server. Please verify the backend is running.');
+      }
+      throw new ApiError(error.message || 'An unexpected error occurred while contacting the server.');
+    }
+  },
+
+  /**
+   * Fetches pages that have been crawled and indexed for a website
+   */
+  async getIndexedPages(websiteId: string): Promise<IndexedPagesResponse> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/websites/${websiteId}/indexed-pages`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        let errorMessage = 'An error occurred while fetching indexed pages';
+        try {
+          const errData = await response.json();
+          errorMessage = errData.detail || errData.message || errorMessage;
+        } catch {
+          // ignore parsing error
+        }
+        throw new ApiError(errorMessage, response.status);
+      }
+
+      return await response.json();
+    } catch (error: any) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+        throw new ApiError('Cannot connect to the backend server. Please verify the backend is running.');
       }
       throw new ApiError(error.message || 'An unexpected error occurred while contacting the server.');
     }

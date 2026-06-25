@@ -60,14 +60,19 @@ export const AddWebsitePage: React.FC = () => {
 
         const newChatId = generateId();
         const now = new Date().toISOString();
+        const websiteId = res.website_id;
 
         // Create new chat
         const newChat: ChatConversation = {
           id: newChatId,
           title: 'New chat',
-          website_id: res.website_id,
+          website_id: websiteId,
+          websiteId: websiteId,
+          websiteDomain: domain,
           created_at: now,
+          createdAt: now,
           updated_at: now,
+          updatedAt: now,
           messages: []
         };
 

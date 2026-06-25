@@ -1,6 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from app.schemas import RootResponse, HealthResponse, UrlValidationRequest, UrlValidationResponse, ContentTypeRequest, ContentTypeResponse, HtmlIngestRequest, HtmlIngestResponse, CrawlRequest, CrawlResponse, IngestUrlRequest, IngestUrlResponse, IngestWebsiteRequest, IngestWebsiteResponse, ChatRequest, ChatResponse
+from app.schemas import RootResponse, HealthResponse, UrlValidationRequest, UrlValidationResponse, ContentTypeRequest, ContentTypeResponse, HtmlIngestRequest, HtmlIngestResponse, CrawlRequest, CrawlResponse, IngestUrlRequest, IngestUrlResponse, IngestWebsiteRequest, IngestWebsiteResponse, ChatRequest, ChatResponse, IndexedPagesResponse
 from app.gemini_client import check_gemini_connection
 from app.ingestion.url_validator import validate_url
 from app.ingestion.content_type_detector import detect_content_type
@@ -231,8 +231,83 @@ async def chat_endpoint(payload: ChatRequest):
         sources=result["sources"],
         retrieved_chunks_count=result["retrieved_chunks_count"],
         used_context_fallback=result["used_context_fallback"],
-        message=result["message"]
+        message=result["message"],
+        generator=result.get("generator", "context_fallback")
     )
+
+
+@app.get("/websites/{website_id}/indexed-pages", response_model=IndexedPagesResponse)
+async def get_indexed_pages_endpoint(website_id: str):
+    """
+    Retrieves the list of crawled and indexed pages for a given website from FAISS metadata.
+    """
+    from app.rag.vector_store import WebsiteVectorStore, sanitize_website_id
+    from urllib.parse import urlparse
+
+    try:
+        sanitized_id = sanitize_website_id(website_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    store = WebsiteVectorStore(sanitized_id)
+    if not store.load() or not store.is_ready():
+        raise HTTPException(status_code=404, detail=f"Website ID '{website_id}' not found or index files are missing.")
+
+    # Group chunks by source_url
+    url_groups = {}
+    for chunk in store.metadata_store:
+        url = chunk.get("source_url") or ""
+        if not url:
+            continue
+        if url not in url_groups:
+            url_groups[url] = {
+                "url": url,
+                "title": chunk.get("title") or "Untitled Page",
+                "chunks_count": 0,
+                "status": "indexed"
+            }
+        url_groups[url]["chunks_count"] += 1
+
+    if not url_groups:
+        raise HTTPException(status_code=404, detail=f"No indexed pages found for Website ID '{website_id}'.")
+
+    # Helper function to find the homepage URL (closest to root domain)
+    def get_homepage_url(urls: list[str]) -> str:
+        if not urls:
+            return ""
+        def url_key(u):
+            parsed = urlparse(u)
+            path = parsed.path.rstrip('/')
+            path_segments = [seg for seg in path.split('/') if seg]
+            return (len(path_segments), len(path), len(parsed.query), len(u))
+        return min(urls, key=url_key)
+
+    homepage_url = get_homepage_url(list(url_groups.keys()))
+
+    # Sort pages: homepage first, then descending chunks_count, then alphabetical title
+    pages = list(url_groups.values())
+    pages.sort(key=lambda x: (
+        x["url"] != homepage_url,  # False (0) for homepage, True (1) for others -> homepage first
+        -x["chunks_count"],        # descending chunks_count
+        x["title"]                 # alphabetical title
+    ))
+
+    pages_indexed = len(url_groups)
+    chunks_created = len(store.metadata_store)
+    vectors_stored = store.index.ntotal if store.index else chunks_created
+
+    return IndexedPagesResponse(
+        success=True,
+        website_id=sanitized_id,
+        source_url=homepage_url,
+        stats={
+            "pages_indexed": pages_indexed,
+            "chunks_created": chunks_created,
+            "vectors_stored": vectors_stored
+        },
+        pages=pages
+    )
+
 
 
 

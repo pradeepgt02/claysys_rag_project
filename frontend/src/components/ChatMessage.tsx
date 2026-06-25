@@ -61,27 +61,36 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
               Retrieved References
             </h4>
             <div className="flex flex-wrap gap-2">
-              {message.sources.map((source, index) => (
-                <a
-                  key={index}
-                  href={source.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-3 py-2 bg-slate-950/40 hover:bg-slate-900 border border-slate-800/60 hover:border-indigo-500/40 rounded-xl text-xs text-slate-300 hover:text-white transition-all cursor-pointer group shadow-sm"
-                >
-                  <div className="max-w-[180px] sm:max-w-[240px] truncate">
-                    <span className="font-semibold block truncate">
-                      {source.title || 'Untitled Reference'}
-                    </span>
-                    {source.heading && (
-                      <span className="text-[10px] text-slate-500 block truncate">
-                        Section: {source.heading}
+              {message.sources.map((source, index) => {
+                const targetUrl = source.source_url || source.url;
+                const displayTitle = source.title && source.title.trim() !== "" ? source.title : targetUrl;
+                return (
+                  <a
+                    key={index}
+                    href={targetUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-3 py-2 bg-slate-950/40 hover:bg-slate-900 border border-slate-800/60 hover:border-indigo-500/40 rounded-xl text-xs text-slate-300 hover:text-white transition-all cursor-pointer group shadow-sm"
+                  >
+                    <div className="max-w-[180px] sm:max-w-[240px] truncate">
+                      {source.is_primary_answer_source && (
+                        <span className="inline-block px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-300 border border-violet-500/30 text-[9px] font-semibold mb-1">
+                          Answer source
+                        </span>
+                      )}
+                      <span className="font-semibold block truncate">
+                        {displayTitle}
                       </span>
-                    )}
-                  </div>
-                  <ExternalLink className="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-400 transition-colors shrink-0" />
-                </a>
-              ))}
+                      {source.heading && (
+                        <span className="text-[10px] text-slate-500 block truncate">
+                          Section: {source.heading}
+                        </span>
+                      )}
+                    </div>
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-400 transition-colors shrink-0" />
+                  </a>
+                );
+              })}
             </div>
           </div>
         )}

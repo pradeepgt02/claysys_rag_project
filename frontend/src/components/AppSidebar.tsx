@@ -13,13 +13,19 @@ export const AppSidebar: React.FC = () => {
     // Generate simple id
     const newChatId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 9);
     const now = new Date().toISOString();
+    const websiteId = state.selectedWebsiteId;
+    const selectedWeb = state.websites.find(w => w.website_id === websiteId);
     
     createConversation({
       id: newChatId,
       title: "New chat",
-      website_id: state.selectedWebsiteId,
+      website_id: websiteId,
+      websiteId: websiteId,
+      websiteDomain: selectedWeb?.domain || selectedWeb?.source_url || '',
       created_at: now,
+      createdAt: now,
       updated_at: now,
+      updatedAt: now,
       messages: []
     });
 

@@ -30,4 +30,9 @@ PLAYWRIGHT_TIMEOUT_MS = int(os.getenv("PLAYWRIGHT_TIMEOUT_MS", "45000"))
 # Vector Database Configurations
 VECTOR_DATA_DIR = os.getenv("VECTOR_DATA_DIR", "data/indexes")
 
+# Ollama Fallback Configurations
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
+USE_OLLAMA_FALLBACK = os.getenv("USE_OLLAMA_FALLBACK", "true").lower() == "true"
+
 

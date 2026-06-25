@@ -108,7 +108,28 @@ class ChatResponse(BaseModel):
     sources: list[dict]
     retrieved_chunks_count: int
     used_context_fallback: bool
+    generator: str
     message: str
+
+
+class IndexedPageInfo(BaseModel):
+    url: str
+    title: str
+    chunks_count: int
+    status: str
+
+class IndexedPagesStats(BaseModel):
+    pages_indexed: int
+    chunks_created: int
+    vectors_stored: int
+
+class IndexedPagesResponse(BaseModel):
+    success: bool
+    website_id: str
+    source_url: str
+    stats: IndexedPagesStats
+    pages: list[IndexedPageInfo]
+
 
 
 

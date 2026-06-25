@@ -92,6 +92,7 @@ def chat_with_website(
         "sources": ans_result.get("sources", []),
         "retrieved_chunks_count": len(retrieved_chunks),
         "used_context_fallback": ans_result.get("used_context_fallback", False),
+        "generator": ans_result.get("generator", "context_fallback"),
         "message": ans_result.get("message", "Answer generated successfully")
     }
 
