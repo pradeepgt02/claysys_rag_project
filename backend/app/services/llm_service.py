@@ -5,9 +5,9 @@ from app import config
 # Setup basic logging for this module
 logger = logging.getLogger(__name__)
 
-# Initialize clients if keys are present
-primary_groq_client = Groq(api_key=config.GROQ_API_KEY) if config.GROQ_API_KEY else None
-fallback_groq_client = Groq(api_key=config.GROQ_FALLBACK_API_KEY) if config.GROQ_FALLBACK_API_KEY else None
+# Initialize clients if keys are present. Using low retries and timeout for fast fallback.
+primary_groq_client = Groq(api_key=config.GROQ_API_KEY, max_retries=1, timeout=10.0) if config.GROQ_API_KEY else None
+fallback_groq_client = Groq(api_key=config.GROQ_FALLBACK_API_KEY, max_retries=1, timeout=10.0) if config.GROQ_FALLBACK_API_KEY else None
 
 SYSTEM_PROMPT = """You are a website-grounded RAG assistant.
 Answer ONLY using the retrieved website context.
