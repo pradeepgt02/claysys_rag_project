@@ -1,0 +1,8 @@
+{
+  "website_id": "amazon_in_67e46348",
+  "dimension": 384,
+  "vector_count": 103,
+  "storage_path": "C:\\Users\\prade\\OneDrive\\Desktop\\Rag_drive\\backend\\data\\indexes\\amazon_in_67e46348",
+  "embedding_provider": "sentence_transformers",
+  "embedding_model": "all-MiniLM-L6-v2"
+}

@@ -6,44 +6,10 @@ parent_dir = Path(__file__).resolve().parent.parent.parent
 if str(parent_dir) not in sys.path:
     sys.path.insert(0, str(parent_dir))
 
-from app.gemini_client import config, generate_chat_response
+from app import config
 from app.rag.retriever import format_retrieved_context
 
-def generate_ollama_response(prompt: str, system_instruction: str) -> dict:
-    """Calls the local Ollama instance for answer generation."""
-    import requests
-    
-    url = f"{config.OLLAMA_BASE_URL.rstrip('/')}/api/generate"
-    full_prompt = f"System Instruction:\n{system_instruction}\n\n{prompt}"
-    
-    payload = {
-        "model": config.OLLAMA_MODEL,
-        "prompt": full_prompt,
-        "stream": False
-    }
-    
-    try:
-        response = requests.post(url, json=payload, timeout=90.0)
-        if response.status_code == 200:
-            res_json = response.json()
-            return {
-                "status": "success",
-                "response": res_json.get("response", "")
-            }
-        else:
-            return {
-                "status": "error",
-                "message": f"Ollama returned status code {response.status_code}: {response.text}"
-            }
-    except requests.RequestException as e:
-        return {
-            "status": "error",
-            "message": f"Ollama connection error: {str(e)}"
-        }
-
-def build_rag_prompt(question: str, context: str) -> str:
-    """Builds a formatted prompt combining the question and context."""
-    return f"Website Context:\n{context}\n\nUser Question:\n{question}\n\nAnswer:"
+from app.services.llm_service import generate_answer
 
 def urls_match_prefix_or_domain(url1: str, url2: str) -> bool:
     """Checks if url1 and url2 are exact matches, prefix matches, or domain/path matches."""
@@ -81,7 +47,7 @@ def build_sources_list(answer_text: str, retrieved_results: list[dict]) -> list[
     if not retrieved_results:
         return []
 
-    # 1. Keep only chunks with score >= 0.45 and construct basic sources list
+    # 1. Keep only chunks with score >= config.RAG_MIN_RELEVANCE_SCORE and construct basic sources list
     seen_urls = set()
     sources = []
     
@@ -90,7 +56,7 @@ def build_sources_list(answer_text: str, retrieved_results: list[dict]) -> list[
     
     for res in sorted_chunks:
         score = res.get("score", res.get("similarity_score", 0.0))
-        if score < 0.45:
+        if score < config.RAG_MIN_RELEVANCE_SCORE:
             continue
             
         url = res.get("source_url", "")
@@ -111,66 +77,39 @@ def build_sources_list(answer_text: str, retrieved_results: list[dict]) -> list[
     # Limit to maximum 4 citation sources
     sources = sources[:4]
 
-    # 2. Extract URLs from answer and search for a primary source
+    # 2. Extract URLs from answer and search for primary sources
     import re
     # Match standard URLs (e.g. http://... or https://...)
     raw_urls = re.findall(r'https?://[^\s)\]]+', answer_text)
     
-    primary_source = None
+    primary_sources = []
+    seen_primary_urls = set()
     
     for r_url in raw_urls:
-        cleaned_url = r_url.rstrip('.,;)]}')
+        cleaned_url = r_url.rstrip('.,;)}')
         
-        # Look in currently selected sources list first (exact match)
-        for src in sources:
-            if src["source_url"] == cleaned_url:
-                primary_source = src
-                break
-        
-        if primary_source:
-            break
-            
-        # Look in currently selected sources list (prefix/domain match)
-        for src in sources:
-            if urls_match_prefix_or_domain(src["source_url"], cleaned_url):
-                primary_source = src
-                break
-                
-        if primary_source:
-            break
-
-        # Look in entire retrieved results (even if score < 0.45 or beyond top 4)
+        # Look in entire retrieved results
         for res in sorted_chunks:
             res_url = res.get("source_url", "")
             if not res_url:
                 continue
             if res_url == cleaned_url or urls_match_prefix_or_domain(res_url, cleaned_url):
-                score = res.get("score", res.get("similarity_score", 0.0))
-                primary_source = {
-                    "title": res.get("title", "") or res_url,
-                    "source_url": res_url,
-                    "url": res_url,
-                    "heading": res.get("heading", "") or "N/A",
-                    "score": score,
-                    "is_primary_answer_source": True
-                }
+                if res_url not in seen_primary_urls:
+                    score = res.get("score", res.get("similarity_score", 0.0))
+                    primary_sources.append({
+                        "title": res.get("title", "") or res_url,
+                        "source_url": res_url,
+                        "url": res_url,
+                        "heading": res.get("heading", "") or "N/A",
+                        "score": score,
+                        "is_primary_answer_source": True
+                    })
+                    seen_primary_urls.add(res_url)
                 break
                 
-        if primary_source:
-            break
-
-    # 3. If a primary source was identified, promote it to citation source #1
-    if primary_source:
-        primary_source["is_primary_answer_source"] = True
-        
-        # Remove from current sources list if it was already in there
-        filtered_sources = [s for s in sources if s["source_url"] != primary_source["source_url"]]
-        
-        # Prepend to the sources list
-        sources = [primary_source] + filtered_sources
-        
-        # Re-apply the maximum 4 limit
-        sources = sources[:4]
+    # 3. If any primary sources were identified, return ONLY those (max 4)
+    if primary_sources:
+        return primary_sources[:4]
 
     return sources
 
@@ -251,35 +190,142 @@ def build_safe_context_fallback(question: str, top_chunk: dict) -> str | None:
         
     return fallback
 
+def is_short_topic_query(question: str) -> bool:
+    """
+    Detects short topic overview queries (1 to 4 words) that do not begin
+    with common question words.
+    """
+    question_clean = question.strip().lower().rstrip("?").strip()
+    if not question_clean:
+        return False
+    words = question_clean.split()
+    if 1 <= len(words) <= 4:
+        question_words = {"what", "why", "how", "when", "where", "who", "which", "can", "does", "is", "are"}
+        if words[0] not in question_words:
+            return True
+    return False
+
+def clean_text_for_summary(text: str) -> str:
+    """
+    Cleans top chunk text by removing navigation items, menus, footers, JS/CSS, and HTML tags.
+    """
+    import re
+    if not text:
+        return ""
+    
+    # Remove HTML comments and raw tags
+    text = re.sub(r'<!--.*?-->', ' ', text, flags=re.DOTALL)
+    text = re.sub(r'<[^>]+>', ' ', text)
+    
+    lines = text.split('\n')
+    cleaned_lines = []
+    
+    # Exclude common navigation/menu list items
+    nav_keywords = {
+        "home", "menu", "search", "sign in", "sign up", "login", "register",
+        "cart", "checkout", "practice", "jobs", "courses", "tutorials", "donate",
+        "share", "last updated", "socialize", "newsletter", "terms of use", "privacy policy",
+        "cookies", "about us", "contact us", "all rights reserved", "copyright"
+    }
+    
+    for line in lines:
+        line_str = line.strip()
+        if not line_str:
+            continue
+        if line_str.lower() in nav_keywords:
+            continue
+        
+        # Exclude JS/CSS blocks
+        if "{" in line_str or "}" in line_str or "const " in line_str or "function()" in line_str:
+            continue
+            
+        words = line_str.split()
+        if len(words) < 5:
+            continue
+            
+        # Remove consecutive duplicated spaces
+        line_str = re.sub(r'\s+', ' ', line_str)
+        cleaned_lines.append(line_str)
+        
+    full_text = " ".join(cleaned_lines)
+    # Remove characters common in menu lists
+    full_text = re.sub(r'[≡|•»›]', ' ', full_text)
+    full_text = re.sub(r'\s+', ' ', full_text).strip()
+    
+    sentences = re.split(r'(?<=[.!?])\s+', full_text)
+    valid_sentences = []
+    for s in sentences:
+        s_clean = s.strip()
+        if len(s_clean.split()) >= 6:
+            # Skip if it is a list of links (e.g. capitalized word ratio is very high)
+            capital_ratio = sum(1 for w in s_clean.split() if w and w[0].isupper()) / len(s_clean.split())
+            if capital_ratio < 0.6:
+                valid_sentences.append(s_clean)
+                if len(valid_sentences) >= 3:
+                    break
+                    
+    return " ".join(valid_sentences)
+
+def build_clean_fallback_summary(top_chunk: dict) -> str:
+    """
+    Summarizes only the top retrieved chunk safely.
+    """
+    title = top_chunk.get("title") or "the indexed website"
+    cleaned = clean_text_for_summary(top_chunk.get("text", ""))
+    if cleaned:
+        return f"Based on the indexed page '{title}': {cleaned}"
+    else:
+        raw_text = top_chunk.get("text", "")
+        # Fallback to plain truncated text if cleaning was too strict
+        snippet = raw_text[:200] + "..." if len(raw_text) > 200 else raw_text
+        return f"Based on the indexed page '{title}': {snippet}"
+
+def is_not_found_response(text: str) -> bool:
+    """
+    Determines if the LLM output is a not-found fallback response.
+    """
+    clean_text = text.strip().lower().rstrip(".")
+    if "could not find this information" in clean_text or "i could not find" in clean_text:
+        return True
+    if not clean_text:
+        return True
+    return False
+
 def generate_rag_answer(
     question: str,
     retrieved_results: list[dict]
 ) -> dict:
     """
-    Generates a RAG-grounded answer using the configured Gemini chat model,
-    with an Ollama local fallback.
+    Generates a RAG-grounded answer using Groq.
     """
-    fallback_answer = "I could not find this information in the indexed website."
+    fallback_answer = "I could not find this information in the indexed website pages."
 
-    # 1. Structure sources early so we have them for any early returns
-    seen_urls = set()
-    sources = []
+    best_score = 0.0
+    best_distance = 0.0
     if retrieved_results:
-        for res in retrieved_results:
-            if not isinstance(res, dict):
-                continue
-            url = res.get("source_url", "")
-            if url and url not in seen_urls:
-                seen_urls.add(url)
-                sources.append({
-                    "url": url,
-                    "title": res.get("title", "") or "Untitled Document",
-                    "heading": res.get("heading", "") or "N/A"
-                })
-                if len(sources) >= 5:
-                    break
+        best_chunk = retrieved_results[0]
+        best_score = best_chunk.get("score", best_chunk.get("similarity_score", 0.0))
+        best_distance = best_chunk.get("distance", 0.0)
 
-    # 2. Validate inputs
+    # 1. Retrieval Guard based on similarity score < config.RAG_MIN_RELEVANCE_SCORE
+    threshold = 0.05 if is_short_topic_query(question) else config.RAG_MIN_RELEVANCE_SCORE
+    if best_score < threshold:
+        return {
+            "success": True,
+            "question": question,
+            "answer": fallback_answer,
+            "sources": [],
+            "context_chunks_used": len(retrieved_results),
+            "generator": "retrieval_guard",
+            "used_context_fallback": False,
+            "message": f"Top similarity score {best_score} < threshold {threshold}",
+            "top_relevance_score": best_score,
+            "retrieval_relevant": False,
+            "answer_mode": "not_found",
+            "is_grounded": False
+        }
+
+    # 2. Input validation: Question cannot be empty
     if not question or question.strip() == "":
         return {
             "success": False,
@@ -289,19 +335,11 @@ def generate_rag_answer(
             "context_chunks_used": 0,
             "generator": "context_fallback",
             "used_context_fallback": False,
-            "message": "Question cannot be empty."
-        }
-
-    if not retrieved_results:
-        return {
-            "success": True,
-            "question": question,
-            "answer": fallback_answer,
-            "sources": [],
-            "context_chunks_used": 0,
-            "generator": "context_fallback",
-            "used_context_fallback": False,
-            "message": "No retrieved results found. Fallback answer returned."
+            "message": "Question cannot be empty.",
+            "top_relevance_score": best_score,
+            "retrieval_relevant": False,
+            "answer_mode": "not_found",
+            "is_grounded": False
         }
 
     # 3. Format context
@@ -313,166 +351,57 @@ def generate_rag_answer(
             "answer": fallback_answer,
             "sources": [],
             "context_chunks_used": 0,
-            "generator": "context_fallback",
+            "generator": "retrieval_guard",
             "used_context_fallback": False,
-            "message": "Retrieved context is empty. Fallback answer returned."
+            "message": "Retrieved context is empty.",
+            "top_relevance_score": best_score,
+            "retrieval_relevant": False,
+            "answer_mode": "not_found",
+            "is_grounded": False
         }
 
-    # 4. Build prompt and configure strict system instructions
-    prompt = build_rag_prompt(question, context)
+    answer_text, generator_name = generate_answer(question, context)
     
-    system_instruction = (
-        "You are WebMind, a website question-answering assistant.\n\n"
-        "Rules:\n"
-        "1. Answer ONLY using the provided website context.\n"
-        "2. Do not use outside knowledge.\n"
-        "3. Do not invent facts, steps, links, or details.\n"
-        "4. If the answer is not clearly present in the context, respond exactly:\n"
-        '"I could not find this information in the indexed website."\n'
-        "5. Keep the answer concise, clear, and useful.\n"
-        "6. Do not mention that you are an AI model.\n"
-        "7. Do not include source URLs inside the answer because sources are returned separately."
-    )
+    if answer_text and not answer_text.startswith("AI generation is temporarily unavailable."):
+        answer_mode = "not_found" if is_not_found_response(answer_text) else "llm"
+        is_grounded = (answer_mode != "not_found")
+        sources_list = build_sources_list(answer_text, retrieved_results) if is_grounded else []
 
-    gemini_failed = False
-    gemini_error_message = ""
-    res = None
-
-    # 5. Try Gemini API using generate_chat_response wrapper
-    try:
-        res = generate_chat_response(prompt, system_instruction=system_instruction)
-        if res and res.get("status") == "success":
-            answer_text = res["response"]
-            if not answer_text or answer_text.strip() == "":
-                answer_text = fallback_answer
-
-            # Grounding validation (Hallucination check)
-            if answer_text != fallback_answer:
-                import re
-                words = re.findall(r'\b[A-Z][a-z]+\b|\b\d+\b', answer_text)
-                if words:
-                    context_lower = context.lower()
-                    matches = sum(1 for w in words if w.lower() in context_lower)
-                    if matches / len(words) < 0.5:
-                        answer_text = fallback_answer
-
-            return {
-                "success": True,
-                "question": question,
-                "answer": answer_text.strip(),
-                "sources": build_sources_list(answer_text, retrieved_results),
-                "context_chunks_used": len(retrieved_results),
-                "generator": "gemini",
-                "used_context_fallback": False,
-                "message": "Answer generated successfully"
-            }
-        else:
-            gemini_failed = True
-            gemini_error_message = res.get("message", "Unknown error") if res else "Unknown error"
-    except Exception as e:
-        gemini_failed = True
-        gemini_error_message = str(e)
-
-    # Check if Gemini error is eligible for fallback: 429, 503, timeout, quota error, or connection error
-    is_fallback_error = False
-    if gemini_failed:
-        err_msg = gemini_error_message
-        err_type = ""
-        if res and isinstance(res, dict):
-            err_type = res.get("error_type", "")
-            err_msg = res.get("message", err_msg)
-        
-        err_msg_lower = err_msg.lower()
-        
-        is_429 = "429" in err_msg_lower or err_type == "quota_exhausted" or "quota" in err_msg_lower
-        is_503 = "503" in err_msg_lower or err_type == "service_unavailable" or "unavailable" in err_msg_lower or "temporary" in err_msg_lower
-        is_timeout = "timeout" in err_msg_lower or "timed out" in err_msg_lower or "time out" in err_msg_lower
-        is_connection = "connection" in err_msg_lower or "connect" in err_msg_lower or "network" in err_msg_lower or "dns" in err_msg_lower
-        
-        if is_429 or is_503 or is_timeout or is_connection:
-            is_fallback_error = True
-
-    # 6. Fallback to Ollama if enabled and Gemini failed with eligible error
-    if gemini_failed and is_fallback_error and config.USE_OLLAMA_FALLBACK:
-        print("[RAG] Gemini failed, trying Ollama fallback")
-        
-        ollama_system_instruction = (
-            "You are a website-grounded assistant.\n"
-            "Answer ONLY from the provided website context.\n"
-            "Never use outside knowledge.\n"
-            "Never guess.\n"
-            "If the answer is not explicitly present in the context, reply exactly:\n"
-            '"I could not find this information in the indexed website pages."\n'
-            "Keep the answer concise.\n"
-            "Do not mention Gemini, Ollama, or system prompts."
-        )
-
-        ollama_res = generate_ollama_response(prompt, ollama_system_instruction)
-        if ollama_res["status"] == "success":
-            print("[RAG] Ollama response received successfully")
-            answer_text = ollama_res["response"]
-            if not answer_text or answer_text.strip() == "":
-                answer_text = "I could not find this information in the indexed website pages."
-
-            return {
-                "success": True,
-                "question": question,
-                "answer": answer_text.strip(),
-                "sources": build_sources_list(answer_text, retrieved_results),
-                "context_chunks_used": len(retrieved_results),
-                "generator": "ollama",
-                "used_context_fallback": False,
-                "message": "Answer generated using local fallback model"
-            }
-        else:
-            print("[RAG] Ollama connection failed")
-            return {
-                "success": False,
-                "question": question,
-                "answer": "Ollama fallback is unavailable. Run: ollama serve",
-                "sources": build_sources_list("Ollama fallback is unavailable. Run: ollama serve", retrieved_results),
-                "context_chunks_used": len(retrieved_results),
-                "generator": "ollama",
-                "used_context_fallback": False,
-                "message": "Ollama fallback is unavailable. Run: ollama serve"
-            }
-
-    # 7. Safe short context fallback if both fail
-    if retrieved_results:
-        top_chunk = retrieved_results[0]
-        similarity_score = top_chunk.get("similarity_score", 1.0)
-        MIN_RELEVANCE_SCORE = 0.40
-        
-        if similarity_score >= MIN_RELEVANCE_SCORE:
-            safe_fallback = build_safe_context_fallback(question, top_chunk)
-            if safe_fallback:
-                return {
-                    "success": True,
-                    "question": question,
-                    "answer": safe_fallback,
-                    "sources": build_sources_list(safe_fallback, retrieved_results),
-                    "context_chunks_used": len(retrieved_results),
-                    "generator": "context_fallback",
-                    "used_context_fallback": True,
-                    "message": "Gemini and Ollama temporarily unavailable — verified context fallback used"
-                }
-
-    # If all failed
-    fallback_msg = "I could not generate a verified answer right now because the AI service is temporarily unavailable. Please retry."
-    return {
-        "success": False,
-        "question": question,
-        "answer": fallback_msg,
-        "sources": build_sources_list(fallback_msg, retrieved_results),
-        "context_chunks_used": len(retrieved_results),
-        "generator": "context_fallback",
-        "used_context_fallback": False,
-        "message": f"Gemini and Ollama unavailable and no safe relevant fallback found. Gemini error: {gemini_error_message}"
-    }
+        return {
+            "success": True,
+            "question": question,
+            "answer": answer_text.strip(),
+            "sources": sources_list,
+            "context_chunks_used": len(retrieved_results),
+            "generator": generator_name,
+            "used_context_fallback": False,
+            "message": "Answer generated successfully",
+            "top_relevance_score": best_score,
+            "retrieval_relevant": True,
+            "answer_mode": answer_mode,
+            "is_grounded": is_grounded
+        }
+    else:
+        # For extractive fallback, we always show the retrieved references
+        sources_list = build_sources_list(answer_text, retrieved_results)
+        return {
+            "success": True,
+            "question": question,
+            "answer": answer_text,
+            "sources": sources_list,
+            "context_chunks_used": len(retrieved_results),
+            "generator": generator_name,
+            "used_context_fallback": False,
+            "message": "LLM providers failed, using extractive fallback.",
+            "top_relevance_score": best_score,
+            "retrieval_relevant": True,
+            "answer_mode": "not_found",
+            "is_grounded": False
+        }
 
 if __name__ == "__main__":
     print("=" * 70)
-    print("Running RAG Answer Generator self-tests with Ollama Fallback...")
+    print("Running RAG Answer Generator self-tests with Groq Fallback...")
     print("=" * 70)
 
     # 1. Simulating Gemini Unavailable
@@ -495,7 +424,7 @@ if __name__ == "__main__":
     }
     
     question = "what is the secret code for webmind?"
-    print(f"\n[Test Case: Gemini Offline -> Ollama Fallback]")
+    print(f"\n[Test Case: Gemini Offline -> Groq Fallback]")
     print(f"Question: '{question}'")
     
     try:
@@ -506,16 +435,16 @@ if __name__ == "__main__":
         print(f"Answer:                  {ans['answer']}")
         print(f"Message:                 {ans['message']}")
         
-        # Verify Ollama was used if fallback was triggered successfully
-        if ans.get("generator") == "ollama":
-            print("\nSUCCESS: Successfully fell back to Ollama!")
+        # Verify Groq was used if fallback was triggered successfully
+        if ans.get("generator") == "groq":
+            print("\nSUCCESS: Successfully fell back to Groq!")
             # Check grounding: answer should contain 998877
             if "998877" in ans["answer"]:
                 print("SUCCESS: Answer is correctly grounded in context!")
             else:
                 print("WARNING: Answer is not grounded in context.")
-        elif ans.get("generator") == "context_fallback":
-            print("\nWARNING: Gemini failed and Ollama was not available (or fallback failed). Used context fallback.")
+        elif ans.get("generator") == "system":
+            print("\nWARNING: Gemini failed and Groq was not available (or fallback failed). Used system fallback.")
         else:
             print("\nFAILURE: Gemini mock was bypassed somehow.")
             
@@ -524,14 +453,6 @@ if __name__ == "__main__":
         
     # Reset mock
     ag.generate_chat_response = original_generate
-    
-    # 2. Check if Ollama is running standalone
-    import requests
-    try:
-        resp = requests.get(f"{config.OLLAMA_BASE_URL.rstrip('/')}/")
-        print("\nOllama status: Running")
-    except Exception:
-        print("\nOllama is not running. Start it with: ollama serve")
 
     # 3. Citation Relevance Self-Tests
     print("\n" + "=" * 70)

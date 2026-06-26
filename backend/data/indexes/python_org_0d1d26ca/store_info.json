@@ -1,0 +1,8 @@
+{
+  "website_id": "python_org_0d1d26ca",
+  "dimension": 384,
+  "vector_count": 176,
+  "storage_path": "C:\\Users\\prade\\OneDrive\\Desktop\\Rag_drive\\backend\\data\\indexes\\python_org_0d1d26ca",
+  "embedding_provider": "sentence_transformers",
+  "embedding_model": "all-MiniLM-L6-v2"
+}

@@ -1,7 +1,10 @@
+import json
+import queue
+import threading
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from app.schemas import RootResponse, HealthResponse, UrlValidationRequest, UrlValidationResponse, ContentTypeRequest, ContentTypeResponse, HtmlIngestRequest, HtmlIngestResponse, CrawlRequest, CrawlResponse, IngestUrlRequest, IngestUrlResponse, IngestWebsiteRequest, IngestWebsiteResponse, ChatRequest, ChatResponse, IndexedPagesResponse
-from app.gemini_client import check_gemini_connection
 from app.ingestion.url_validator import validate_url
 from app.ingestion.content_type_detector import detect_content_type
 from app.ingestion.html_ingestor import ingest_html
@@ -17,6 +20,12 @@ from app import config
 
 # Initialize FastAPI App
 app = FastAPI(title="WebMind – RAG Powered Website Chatbot")
+
+@app.on_event("startup")
+async def startup_event():
+    import logging
+    logging.info(f"GROQ_API_KEY is configured: {bool(config.GROQ_API_KEY)}")
+    print(f"INFO:     GROQ_API_KEY is configured: {bool(config.GROQ_API_KEY)}")
 
 # Configure CORS origins
 origins = [
@@ -39,21 +48,21 @@ async def read_root():
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """Health check endpoint evaluating both backend and Gemini API connectivity."""
-    connection_result = check_gemini_connection()
-    
-    if connection_result["status"] == "success":
+    """Health check endpoint evaluating both backend and Groq API connectivity."""
+    # Since we now rely on local embeddings and Groq (which doesn't have a simple ping endpoint without paying),
+    # we just verify the key is present.
+    if config.GROQ_API_KEY:
         return HealthResponse(
             backend_status="healthy",
-            gemini_status="connected",
-            chat_model=config.GEMINI_CHAT_MODEL,
-            embedding_model=config.GEMINI_EMBED_MODEL
+            gemini_status="connected", # Kept as gemini_status for frontend backwards compatibility
+            chat_model=config.GROQ_MODEL,
+            embedding_model="sentence-transformers/all-MiniLM-L6-v2"
         )
     else:
         return HealthResponse(
             backend_status="healthy",
             gemini_status="not_connected",
-            message=connection_result["message"]
+            message="GROQ_API_KEY is not configured"
         )
 
 @app.post("/validate-url", response_model=UrlValidationResponse)
@@ -189,31 +198,85 @@ async def ingest_url_endpoint(payload: IngestUrlRequest):
         message=result["message"]
     )
 
-@app.post("/ingest", response_model=IngestWebsiteResponse)
+@app.post("/ingest")
 async def ingest_website_endpoint(payload: IngestWebsiteRequest):
-    """Endpoint to crawl, extract, chunk, embed, and FAISS index a website/document URL recursively."""
+    """
+    Streams NDJSON progress events during website crawling, embedding, and indexing.
+    Each line is a JSON object with a 'stage' field.  The final line contains all
+    IngestWebsiteResponse fields when stage == 'completed' or stage == 'failed'.
+    """
     if payload.max_pages and payload.max_pages > 100:
-        from fastapi import HTTPException
         raise HTTPException(status_code=422, detail="Maximum allowed crawl limit is 100 pages.")
 
-    result = ingest_website(
-        url=payload.url,
-        max_pages=payload.max_pages or 25,
-        initial_question=payload.initial_question or ""
-    )
-    return IngestWebsiteResponse(
-        success=result["success"],
-        website_id=result["website_id"],
-        source_url=result["source_url"],
-        content_type=result["content_type"],
-        pages_crawled=result["pages_crawled"],
-        documents_processed=result["documents_processed"],
-        chunks_created=result["chunks_created"],
-        chunks_embedded=result["chunks_embedded"],
-        chunks_failed=result["chunks_failed"],
-        vector_store_stats=result["vector_store_stats"],
-        message=result["message"]
-    )
+    # Thread-safe queue for progress events produced by the background worker
+    event_queue: queue.Queue = queue.Queue()
+    _SENTINEL = object()  # signals that the worker is done
+
+    def run_ingestion():
+        def on_progress(event: dict):
+            event_queue.put(event)
+
+        result = ingest_website(
+            url=payload.url,
+            max_pages=payload.max_pages or 25,
+            initial_question=payload.initial_question or "",
+            progress_callback=on_progress
+        )
+        # Merge final result into the last event so the frontend gets all fields
+        event_queue.put({**result, "stage": result.get("stage", "completed" if result.get("success") else "failed")})
+        event_queue.put(_SENTINEL)
+
+    worker = threading.Thread(target=run_ingestion, daemon=True)
+    worker.start()
+
+    def generate():
+        while True:
+            item = event_queue.get()
+            if item is _SENTINEL:
+                break
+            yield json.dumps(item) + "\n"
+
+    return StreamingResponse(generate(), media_type="application/x-ndjson")
+
+@app.get("/test_retrieval")
+async def test_retrieval(website_id: str, question: str):
+    from app.rag.retriever import retrieve_relevant_chunks
+    res = retrieve_relevant_chunks(website_id, question, top_k=20)
+    return res
+
+@app.get("/test_retrieval2")
+async def test_retrieval2(website_id: str, question: str):
+    from app.rag.retriever import retrieve_relevant_chunks
+    res = retrieve_relevant_chunks(website_id, question, top_k=20)
+    return res
+
+@app.get("/test_metadata")
+async def test_metadata(website_id: str, url: str = None):
+    import json
+    from pathlib import Path
+    from app import config
+    
+    meta_path = Path(config.VECTOR_DATA_DIR) / website_id / "metadata.json"
+    index_path = Path(config.VECTOR_DATA_DIR) / website_id / "index.faiss"
+    if not meta_path.is_absolute():
+        meta_path = Path(config.BASE_DIR) / meta_path
+        index_path = Path(config.BASE_DIR) / index_path
+        
+    with open(meta_path, "r", encoding="utf-8") as f:
+        metadata = json.load(f)
+        
+    import faiss
+    try:
+        index = faiss.read_index(str(index_path))
+        ntotal = index.ntotal
+    except Exception as e:
+        ntotal = -1
+        
+    if url:
+        chunks = [m for m in metadata if m.get("source_url") == url]
+    else:
+        chunks = metadata
+    return {"ntotal": ntotal, "length": len(metadata), "chunks": chunks}
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(payload: ChatRequest):
@@ -221,7 +284,7 @@ async def chat_endpoint(payload: ChatRequest):
     result = chat_with_website(
         website_id=payload.website_id,
         question=payload.question,
-        top_k=payload.top_k or 5
+        top_k=payload.top_k or 15
     )
     return ChatResponse(
         success=result["success"],
@@ -232,7 +295,11 @@ async def chat_endpoint(payload: ChatRequest):
         retrieved_chunks_count=result["retrieved_chunks_count"],
         used_context_fallback=result["used_context_fallback"],
         message=result["message"],
-        generator=result.get("generator", "context_fallback")
+        generator=result.get("generator", "context_fallback"),
+        top_relevance_score=result.get("top_relevance_score"),
+        retrieval_relevant=result.get("retrieval_relevant"),
+        answer_mode=result.get("answer_mode"),
+        is_grounded=result.get("is_grounded", False)
     )
 
 
@@ -240,9 +307,11 @@ async def chat_endpoint(payload: ChatRequest):
 async def get_indexed_pages_endpoint(website_id: str):
     """
     Retrieves the list of crawled and indexed pages for a given website from FAISS metadata.
+    Uses metadata-only loading (skips the heavy FAISS binary) for fast response times.
     """
     from app.rag.vector_store import WebsiteVectorStore, sanitize_website_id
     from urllib.parse import urlparse
+    import json as _json
 
     try:
         sanitized_id = sanitize_website_id(website_id)
@@ -250,8 +319,21 @@ async def get_indexed_pages_endpoint(website_id: str):
         raise HTTPException(status_code=400, detail=str(e))
 
     store = WebsiteVectorStore(sanitized_id)
-    if not store.load() or not store.is_ready():
+
+    # Use metadata-only load — avoids deserializing the full FAISS binary which can be slow
+    if not store.load_metadata_only() or not store.metadata_store:
         raise HTTPException(status_code=404, detail=f"Website ID '{website_id}' not found or index files are missing.")
+
+    # Read vector count from store_info.json (already saved during indexing) to avoid loading FAISS
+    info_path = store.storage_path / "store_info.json"
+    vectors_stored = len(store.metadata_store)  # fallback
+    if info_path.exists():
+        try:
+            with open(info_path, "r", encoding="utf-8") as _f:
+                info = _json.load(_f)
+            vectors_stored = info.get("vector_count", vectors_stored)
+        except Exception:
+            pass
 
     # Group chunks by source_url
     url_groups = {}
@@ -294,7 +376,6 @@ async def get_indexed_pages_endpoint(website_id: str):
 
     pages_indexed = len(url_groups)
     chunks_created = len(store.metadata_store)
-    vectors_stored = store.index.ntotal if store.index else chunks_created
 
     return IndexedPagesResponse(
         success=True,
@@ -308,8 +389,18 @@ async def get_indexed_pages_endpoint(website_id: str):
         pages=pages
     )
 
-
-
-
-
-
+@app.delete("/websites/{website_id}")
+async def delete_website_endpoint(website_id: str):
+    """Deletes an indexed website's vector store and metadata."""
+    from app.rag.vector_store import WebsiteVectorStore, sanitize_website_id
+    try:
+        sanitized_id = sanitize_website_id(website_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+        
+    store = WebsiteVectorStore(sanitized_id)
+    try:
+        store.clear()
+        return {"success": True, "message": f"Website '{website_id}' deleted successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete website: {str(e)}")

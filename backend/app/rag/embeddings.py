@@ -1,12 +1,16 @@
 import sys
+import threading
 from pathlib import Path
+import concurrent.futures
+from typing import Callable, Optional
 
 # Add parent directory of this file to sys.path to support running this script directly
 parent_dir = Path(__file__).resolve().parent.parent.parent
 if str(parent_dir) not in sys.path:
     sys.path.insert(0, str(parent_dir))
 
-from app.gemini_client import create_embedding, create_embeddings
+from app.services.embeddings import create_embedding, create_embeddings
+from app import config
 
 def embed_chunk(chunk: dict, task_type: str = "retrieval_document") -> dict:
     """
@@ -30,27 +34,46 @@ def embed_chunk(chunk: dict, task_type: str = "retrieval_document") -> dict:
         
     return chunk_copy
 
-def embed_chunks(chunks: list[dict], batch_size: int = 20, task_type: str = "retrieval_document") -> list[dict]:
+def embed_chunks(
+    chunks: list[dict],
+    batch_size: Optional[int] = None,
+    task_type: str = "retrieval_document",
+    progress_callback: Optional[Callable[[dict], None]] = None
+) -> list[dict]:
     """
-    Embeds a list of chunk dictionaries using batching for maximum efficiency.
-    Preserves original chunk ordering. If a batch call fails, it falls back
-    to embedding chunks within that batch individually so that single failures
-    do not crash the entire process.
+    Embeds a list of chunk dictionaries using batching and parallel execution
+    for maximum efficiency. Preserves original chunk ordering.
+    If a batch call fails, it falls back to embedding chunks within that batch
+    individually so that single failures do not crash the entire process.
+
+    Args:
+        chunks: List of chunk dicts with at least a 'text' key.
+        batch_size: Number of chunks per batch. Defaults to config.EMBEDDING_BATCH_SIZE.
+        task_type: Gemini embedding task type.
+        progress_callback: Optional callable receiving progress dicts after each batch.
     """
     if not chunks:
         return []
 
+    if batch_size is None:
+        batch_size = config.EMBEDDING_BATCH_SIZE
+
+    total_count = len(chunks)
+    processed_count = 0
+    lock = threading.Lock()
+
     # Copy list elements to avoid modifying inputs
     result_chunks = [dict(c) for c in chunks]
 
-    # Process in batches
-    for i in range(0, len(result_chunks), batch_size):
-        batch_slice = result_chunks[i : i + batch_size]
-        batch_texts = [c.get("text", "") for c in batch_slice]
+    # Divide chunks into batches
+    batches = [result_chunks[i : i + batch_size] for i in range(0, len(result_chunks), batch_size)]
 
+    def embed_batch(batch_slice: list[dict]) -> None:
+        nonlocal processed_count
+        batch_texts = [c.get("text", "") for c in batch_slice]
         try:
-            # Batch API call
-            embeddings_list = create_embeddings(batch_texts, batch_size=batch_size, task_type=task_type)
+            # Batch API call with batch_size equal to batch_texts length to send all at once
+            embeddings_list = create_embeddings(batch_texts, batch_size=len(batch_slice), task_type=task_type)
             
             # Map values back to slice
             for idx, emb in enumerate(embeddings_list):
@@ -73,6 +96,24 @@ def embed_chunks(chunks: list[dict], batch_size: int = 20, task_type: str = "ret
                     chunk["embedding_error"] = str(ind_err)
                     chunk.pop("embedding", None)
                     chunk.pop("embedding_dimension", None)
+
+        # Update progress counter safely from parallel threads
+        with lock:
+            processed_count += len(batch_slice)
+            if progress_callback is not None:
+                pct = int((processed_count / total_count) * 100) if total_count > 0 else 100
+                progress_callback({
+                    "stage": "creating_embeddings",
+                    "processed_chunks": processed_count,
+                    "total_chunks": total_count,
+                    "percentage": pct,
+                    "message": f"Creating embeddings ({processed_count} / {total_count})"
+                })
+
+    # Use ThreadPoolExecutor to run batch embedding in parallel
+    # A limit of 5 workers is safe for typical API rate limits while providing 5x speedup
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        executor.map(embed_batch, batches)
 
     return result_chunks
 

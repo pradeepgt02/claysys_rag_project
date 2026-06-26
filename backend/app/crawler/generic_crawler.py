@@ -78,68 +78,81 @@ def crawl_website(start_url: str, max_pages: int = 5, initial_question: str = ""
     url_matched_terms[normalized_start_url] = start_scoring["matched_terms"]
 
     # 3. Crawler Loop
+    from concurrent.futures import ThreadPoolExecutor
+
+    MAX_CONCURRENT_REQUESTS = 5
+
     while not queue.is_empty() and len(pages) < max_pages:
-        current_url = queue.pop()
+        batch_urls = []
+        # Pop a batch of URLs
+        while not queue.is_empty() and len(batch_urls) < MAX_CONCURRENT_REQUESTS and len(pages) + len(batch_urls) < max_pages:
+            current_url = queue.pop()
+            if current_url not in visited_urls and current_url not in failed_urls:
+                batch_urls.append(current_url)
+                # Optimistically mark as visited so we don't pick it up again if it appears multiple times
+                visited_urls.add(current_url)
 
-        # Skip if we already crawled or failed this URL
-        if current_url in visited_urls or current_url in failed_urls:
+        if not batch_urls:
             continue
 
-        # Ingest HTML contents
-        ingest_result = ingest_html(current_url)
+        # Ingest HTML contents concurrently
+        with ThreadPoolExecutor(max_workers=len(batch_urls)) as executor:
+            results = list(executor.map(ingest_html, batch_urls))
 
-        if not ingest_result["success"]:
-            # Track failed URL and continue the crawl (store normalized URL)
-            failed_urls.add(current_url)
-            visited_urls.add(current_url) # Mark as visited to prevent retries
-            continue
+        # Process results
+        for current_url, ingest_result in zip(batch_urls, results):
+            if not ingest_result["success"]:
+                # Track failed URL
+                failed_urls.add(current_url)
+                continue
 
-        # Successfully ingested, record visited status (store normalized URL)
-        visited_urls.add(current_url)
-
-        # Store parsed page contents (use normalized final_url)
-        normalized_final_url = normalize_crawl_url(ingest_result["final_url"])
-        
-        # Ensure redirect URL has metadata
-        if normalized_final_url not in url_relevance:
-            url_relevance[normalized_final_url] = url_relevance.get(current_url, 0.0)
-            url_reasons[normalized_final_url] = url_reasons.get(current_url, "")
-            url_matched_terms[normalized_final_url] = url_matched_terms.get(current_url, [])
-
-        pages.append({
-            "url": normalized_final_url,
-            "title": ingest_result["title"],
-            "description": ingest_result["description"],
-            "headings": ingest_result["headings"],
-            "text": ingest_result["text"],
-            "links": ingest_result["links"],
-            "text_length": ingest_result["text_length"],
-            "crawl_relevance_score": url_relevance.get(normalized_final_url, 0.0),
-            "crawl_reason": url_reasons.get(normalized_final_url, ""),
-            "matched_terms": url_matched_terms.get(normalized_final_url, [])
-        })
-
-        # 4. Discover Same-Domain links from the current page
-        discovered_links = discover_same_domain_links(
-            page_url=ingest_result["final_url"],
-            links=ingest_result["links"],
-            base_domain=base_domain,
-            initial_question=initial_question,
-            page_title=ingest_result["title"]
-        )
-
-        # Add unique links to the crawl queue after normalizing and tracking their relevance
-        for link in discovered_links:
-            normalized_link = link["url"]
+            # Store parsed page contents (use normalized final_url)
+            normalized_final_url = normalize_crawl_url(ingest_result["final_url"])
             
-            # Keep highest score if link is discovered multiple times
-            if normalized_link not in url_relevance or link["relevance_score"] > url_relevance[normalized_link]:
-                url_relevance[normalized_link] = link["relevance_score"]
-                url_reasons[normalized_link] = link["relevance_reason"]
-                url_matched_terms[normalized_link] = link["matched_terms"]
+            # Ensure redirect URL has metadata
+            if normalized_final_url not in url_relevance:
+                url_relevance[normalized_final_url] = url_relevance.get(current_url, 0.0)
+                url_reasons[normalized_final_url] = url_reasons.get(current_url, "")
+                url_matched_terms[normalized_final_url] = url_matched_terms.get(current_url, [])
 
-            if normalized_link not in visited_urls and normalized_link not in failed_urls:
-                queue.add(normalized_link)
+            pages.append({
+                "url": normalized_final_url,
+                "title": ingest_result["title"],
+                "description": ingest_result["description"],
+                "headings": ingest_result["headings"],
+                "text": ingest_result["text"],
+                "links": ingest_result["links"],
+                "text_length": ingest_result["text_length"],
+                "crawl_relevance_score": url_relevance.get(normalized_final_url, 0.0),
+                "crawl_reason": url_reasons.get(normalized_final_url, ""),
+                "matched_terms": url_matched_terms.get(normalized_final_url, [])
+            })
+
+            # We may have reached the limit if many redirects went to same page etc, though we limit batch based on max_pages
+            if len(pages) >= max_pages:
+                break
+
+            # 4. Discover Same-Domain links from the current page
+            discovered_links = discover_same_domain_links(
+                page_url=ingest_result["final_url"],
+                links=ingest_result["links"],
+                base_domain=base_domain,
+                initial_question=initial_question,
+                page_title=ingest_result["title"]
+            )
+
+            # Add unique links to the crawl queue after normalizing and tracking their relevance
+            for link in discovered_links:
+                normalized_link = link["url"]
+                
+                # Keep highest score if link is discovered multiple times
+                if normalized_link not in url_relevance or link["relevance_score"] > url_relevance[normalized_link]:
+                    url_relevance[normalized_link] = link["relevance_score"]
+                    url_reasons[normalized_link] = link["relevance_reason"]
+                    url_matched_terms[normalized_link] = link["matched_terms"]
+
+                if normalized_link not in visited_urls and normalized_link not in failed_urls:
+                    queue.add(normalized_link)
 
         # Sort the CrawlQueue globally by relevance score descending on each discovery iteration
         from collections import deque

@@ -21,6 +21,12 @@ export interface IngestResponse {
   chunks_failed: number;
   vector_store_stats: VectorStoreStats;
   message: string;
+  // Streaming progress fields (present in intermediate events)
+  stage?: string;
+  processed_chunks?: number;
+  total_chunks?: number;
+  percentage?: number;
+  timings?: Record<string, number>;
 }
 
 export interface ChatRequest {
@@ -47,6 +53,8 @@ export interface ChatResponse {
   retrieved_chunks_count?: number;
   used_context_fallback?: boolean;
   message?: string;
+  generator?: string;
+  is_grounded?: boolean;
 }
 
 export interface ChatMessage {
@@ -57,6 +65,8 @@ export interface ChatMessage {
   created_at?: string;
   sources?: Source[];
   used_context_fallback?: boolean;
+  generator?: string;
+  is_grounded?: boolean;
 }
 
 export interface IndexedWebsite {

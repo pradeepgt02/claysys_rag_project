@@ -7,20 +7,20 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Load environment variables from the .env file if it exists
 env_path = BASE_DIR / ".env"
-load_dotenv(dotenv_path=env_path)
+load_dotenv(dotenv_path=env_path, override=True)
 
 # Retrieve configuration variables
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_CHAT_MODEL = os.getenv("GEMINI_CHAT_MODEL", "gemini-2.5-flash")
-GEMINI_EMBED_MODEL = os.getenv("GEMINI_EMBED_MODEL", "gemini-embedding-001")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_FALLBACK_API_KEY = os.getenv("GROQ_FALLBACK_API_KEY")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 # Validate configuration
-if not GEMINI_API_KEY or GEMINI_API_KEY.strip() == "" or GEMINI_API_KEY == "your_gemini_api_key_here":
+if not GROQ_API_KEY or GROQ_API_KEY.strip() == "" or GROQ_API_KEY == "your_groq_api_key_here":
     raise ValueError(
-        "Configuration Error: GEMINI_API_KEY is missing or invalid in your .env file.\n"
+        "Configuration Error: GROQ_API_KEY is missing or invalid in your .env file.\n"
         "Please perform the following steps:\n"
         "  1. Copy '.env.example' to '.env' inside the 'backend' folder.\n"
-        "  2. Replace 'your_gemini_api_key_here' with your real API key from Google AI Studio (https://aistudio.google.com/)."
+        "  2. Replace 'your_groq_api_key_here' with your real API key from Groq Console."
     )
 
 # Playwright Fallback Configurations
@@ -29,10 +29,14 @@ PLAYWRIGHT_TIMEOUT_MS = int(os.getenv("PLAYWRIGHT_TIMEOUT_MS", "45000"))
 
 # Vector Database Configurations
 VECTOR_DATA_DIR = os.getenv("VECTOR_DATA_DIR", "data/indexes")
+RAG_MIN_RELEVANCE_SCORE = float(os.getenv("RAG_MIN_RELEVANCE_SCORE", "0.20"))
 
-# Ollama Fallback Configurations
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
-USE_OLLAMA_FALLBACK = os.getenv("USE_OLLAMA_FALLBACK", "true").lower() == "true"
 
+# Chunking Configurations
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "700"))
+CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "100"))
+MIN_CHUNK_LENGTH = int(os.getenv("MIN_CHUNK_LENGTH", "100"))
+
+# Embedding Configurations
+EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", "10"))
 

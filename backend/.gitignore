@@ -11,7 +11,6 @@ __pycache__/
 
 # Environment variables (contains API keys)
 .env
-
 # IDEs and editors
 .vscode/
 .idea/

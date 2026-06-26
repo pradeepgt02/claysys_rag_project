@@ -110,6 +110,10 @@ class ChatResponse(BaseModel):
     used_context_fallback: bool
     generator: str
     message: str
+    top_relevance_score: Optional[float] = None
+    retrieval_relevant: Optional[bool] = None
+    answer_mode: Optional[str] = None
+    is_grounded: bool = False
 
 
 class IndexedPageInfo(BaseModel):

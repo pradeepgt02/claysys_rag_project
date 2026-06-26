@@ -32,12 +32,12 @@ export const ConversationList: React.FC = () => {
                 key={chat.id}
                 className={`flex items-start gap-2 px-3 py-2 rounded-lg transition-colors group cursor-pointer ${
                   chatId === chat.id 
-                    ? 'bg-violet-500/10 text-violet-300' 
-                    : 'hover:bg-white/5 text-slate-300'
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300' 
+                    : 'hover:bg-slate-200 text-slate-700 dark:hover:bg-white/5 dark:text-slate-300'
                 }`}
                 onClick={() => navigate(`/workspace/chat/${chat.id}`)}
               >
-                <MessageSquare className={`w-4 h-4 shrink-0 mt-1 ${chatId === chat.id ? 'text-violet-400' : 'text-slate-400'}`} />
+                <MessageSquare className={`w-4 h-4 shrink-0 mt-1 ${chatId === chat.id ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`} />
                 <div className="flex-1 min-w-0 flex flex-col">
                   <span className="text-sm font-medium truncate">
                     {chat.title}
@@ -62,7 +62,7 @@ export const ConversationList: React.FC = () => {
                       }
                     }
                   }}
-                  className="opacity-0 group-hover:opacity-100 hover:text-rose-400 transition-opacity p-1 mt-0.5"
+                  className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-600 dark:text-slate-500 dark:hover:text-rose-400 transition-opacity p-1 mt-0.5"
                   title="Delete chat"
                 >
                   <Trash2 className="w-3.5 h-3.5" />

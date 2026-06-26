@@ -191,7 +191,9 @@ class WebsiteVectorStore:
             "website_id": self.website_id,
             "dimension": self.index.d,
             "vector_count": self.index.ntotal,
-            "storage_path": str(self.storage_path)
+            "storage_path": str(self.storage_path),
+            "embedding_provider": "sentence_transformers",
+            "embedding_model": "all-MiniLM-L6-v2"
         }
         with open(info_path, "w", encoding="utf-8") as f:
             json.dump(info, f, indent=2, ensure_ascii=False)
@@ -200,18 +202,63 @@ class WebsiteVectorStore:
         """Loads index and metadata files if they exist. Safely handles file corruption."""
         index_path = self.storage_path / "index.faiss"
         metadata_path = self.storage_path / "metadata.json"
+        info_path = self.storage_path / "store_info.json"
+
+        with open(Path(config.BASE_DIR) / "data" / "path_debug.log", "a") as f:
+            f.write(f"Website ID: {self.website_id}\n")
+            f.write(f"Storage path: {self.storage_path}\n")
+            f.write(f"Index exists: {index_path.exists()}, Metadata exists: {metadata_path.exists()}\n")
 
         if not index_path.exists() or not metadata_path.exists():
             return False
+
+        if info_path.exists():
+            try:
+                with open(info_path, "r", encoding="utf-8") as f:
+                    info = json.load(f)
+                    if info.get("embedding_provider") != "sentence_transformers" or info.get("embedding_model") != "all-MiniLM-L6-v2" or info.get("dimension") != 384:
+                        raise ValueError("This website index uses an older embedding model. Please re-index this website.")
+            except ValueError as ve:
+                raise ve
+            except Exception:
+                pass
+        else:
+            raise ValueError("This website index uses an older embedding model. Please re-index this website.")
 
         try:
             self.index = faiss.read_index(str(index_path))
             with open(metadata_path, "r", encoding="utf-8") as f:
                 self.metadata_store = json.load(f)
             return True
-        except Exception:
+        except Exception as e:
+            with open(self.storage_path / "debug.log", "a") as dbg:
+                import traceback
+                dbg.write(f"Exception loading index: {str(e)}\n")
+                dbg.write(traceback.format_exc())
             # Handle corrupt/malformed files cleanly
             self.index = None
+            self.metadata_store = []
+            return False
+
+    def load_metadata_only(self) -> bool:
+        """
+        Loads only metadata.json without reading the FAISS index binary.
+        Much faster than load() — use this when vector search is not needed
+        (e.g. for the indexed-pages viewer endpoint).
+        Returns True if metadata was loaded successfully.
+        """
+        metadata_path = self.storage_path / "metadata.json"
+        index_path = self.storage_path / "index.faiss"
+
+        # Both files must exist for the store to be considered valid
+        if not metadata_path.exists() or not index_path.exists():
+            return False
+
+        try:
+            with open(metadata_path, "r", encoding="utf-8") as f:
+                self.metadata_store = json.load(f)
+            return True
+        except Exception:
             self.metadata_store = []
             return False
 

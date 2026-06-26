@@ -12,7 +12,7 @@ from app.rag.answer_generator import generate_rag_answer
 def chat_with_website(
     website_id: str,
     question: str,
-    top_k: int = 5
+    top_k: int = 15
 ) -> dict:
     """
     Orchestrates website chat question answering:
@@ -46,7 +46,7 @@ def chat_with_website(
             "message": "Validation Error: question must not be empty."
         }
 
-    if not (1 <= top_k <= 10):
+    if not (1 <= top_k <= 25):
         return {
             "success": False,
             "website_id": website_id,
@@ -55,7 +55,7 @@ def chat_with_website(
             "sources": [],
             "retrieved_chunks_count": 0,
             "used_context_fallback": False,
-            "message": "Validation Error: top_k must be between 1 and 10."
+            "message": "Validation Error: top_k must be between 1 and 25."
         }
 
     # B. Call retrieval query
@@ -67,6 +67,20 @@ def chat_with_website(
 
     # C. Handle retrieval failures
     if not retrieval_result.get("success", False):
+        if retrieval_result.get("message") == "RATE_LIMIT_EXCEEDED":
+            return {
+                "success": False,
+                "website_id": website_id,
+                "question": question,
+                "answer": "The search service is temporarily busy due to API limits. Please wait a moment and try again.",
+                "sources": [],
+                "generator": "system",
+                "is_grounded": False,
+                "retrieved_chunks_count": 0,
+                "used_context_fallback": False,
+                "message": "Quota exceeded."
+            }
+            
         return {
             "success": False,
             "website_id": website_id,
@@ -75,7 +89,7 @@ def chat_with_website(
             "sources": [],
             "retrieved_chunks_count": 0,
             "used_context_fallback": False,
-            "message": "No indexed website data found for this website_id."
+            "message": retrieval_result.get("message", "No indexed website data found for this website_id.")
         }
 
     retrieved_chunks = retrieval_result.get("results", [])
@@ -93,7 +107,11 @@ def chat_with_website(
         "retrieved_chunks_count": len(retrieved_chunks),
         "used_context_fallback": ans_result.get("used_context_fallback", False),
         "generator": ans_result.get("generator", "context_fallback"),
-        "message": ans_result.get("message", "Answer generated successfully")
+        "message": ans_result.get("message", "Answer generated successfully"),
+        "top_relevance_score": ans_result.get("top_relevance_score"),
+        "retrieval_relevant": ans_result.get("retrieval_relevant"),
+        "answer_mode": ans_result.get("answer_mode"),
+        "is_grounded": ans_result.get("is_grounded", False)
     }
 
 if __name__ == "__main__":

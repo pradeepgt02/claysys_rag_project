@@ -50,15 +50,15 @@ export const EmptyChatState: React.FC<EmptyChatStateProps> = ({
     return (
       <div className="h-full flex flex-col items-center justify-center p-6 text-center max-w-xl mx-auto space-y-8 animate-fade-in select-none">
         <div className="space-y-3">
-          <div className="w-16 h-16 bg-gradient-to-tr from-violet-600 to-indigo-600 rounded-2xl flex items-center justify-center mx-auto shadow-xl shadow-indigo-500/20">
+          <div className="w-16 h-16 bg-gradient-to-tr from-blue-600 to-sky-600 rounded-2xl flex items-center justify-center mx-auto shadow-xl shadow-sky-500/20">
             <Sparkles className="w-8 h-8 text-white" />
           </div>
           <div className="space-y-1">
-            <h2 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-white via-indigo-200 to-violet-300 tracking-tight">
+            <h2 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 via-sky-800 to-blue-800 dark:from-white dark:via-sky-200 dark:to-blue-300 tracking-tight">
               New chat
             </h2>
-            <p className="text-sm text-slate-400">
-              Ask questions about <span className="text-violet-400 font-semibold">{selectedWebsiteDomain}</span>
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              Ask questions about <span className="text-blue-600 dark:text-blue-400 font-semibold">{selectedWebsiteDomain}</span>
             </p>
           </div>
         </div>
@@ -75,10 +75,10 @@ export const EmptyChatState: React.FC<EmptyChatStateProps> = ({
                 key={idx}
                 type="button"
                 onClick={() => onSelectQuestion && onSelectQuestion(q)}
-                className="w-full text-left px-5 py-4 bg-slate-900/30 hover:bg-slate-900/80 border border-slate-800/40 hover:border-violet-500/30 rounded-2xl text-xs font-semibold text-slate-300 hover:text-white transition-all duration-300 flex items-center justify-between group hover:scale-[1.01] hover:shadow-lg hover:shadow-violet-500/5 active:scale-[0.99]"
+                className="w-full text-left px-5 py-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 dark:bg-slate-900/30 dark:hover:bg-slate-900/80 dark:border-slate-800/40 hover:border-blue-500/30 dark:hover:border-blue-500/30 rounded-2xl text-xs font-semibold text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white transition-all duration-300 flex items-center justify-between group hover:scale-[1.01] hover:shadow-lg hover:shadow-blue-500/5 active:scale-[0.99]"
               >
                 <span>{q}</span>
-                <MessageSquare className="w-4 h-4 text-slate-500 group-hover:text-violet-400 transition-colors shrink-0 ml-2" />
+                <MessageSquare className="w-4 h-4 text-slate-400 group-hover:text-blue-500 dark:text-slate-500 dark:group-hover:text-blue-400 transition-colors shrink-0 ml-2" />
               </button>
             ))}
           </div>
@@ -90,11 +90,11 @@ export const EmptyChatState: React.FC<EmptyChatStateProps> = ({
   // Welcome Mode
   return (
     <div className="h-full flex flex-col items-center justify-center p-6 text-center max-w-md mx-auto animate-fade-in select-none">
-      <div className="w-16 h-16 bg-violet-500/10 rounded-2xl flex items-center justify-center mb-6 border border-violet-500/20 shadow-[0_0_40px_rgba(139,92,246,0.1)]">
-        <Globe className="w-8 h-8 text-violet-400" />
+      <div className="w-16 h-16 bg-blue-100 dark:bg-blue-500/10 rounded-2xl flex items-center justify-center mb-6 border border-blue-200 dark:border-blue-500/20 shadow-[0_0_40px_rgba(139,92,246,0.1)]">
+        <Globe className="w-8 h-8 text-blue-600 dark:text-blue-400" />
       </div>
-      <h2 className="text-2xl font-bold text-slate-100 mb-2">Welcome to WebMind</h2>
-      <p className="text-slate-400 mb-8 leading-relaxed text-sm">
+      <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">Welcome to WebMind</h2>
+      <p className="text-slate-600 dark:text-slate-400 mb-8 leading-relaxed text-sm">
         {hasWebsites 
           ? "Select a website knowledge base and ask questions with cited sources."
           : "Add a website to get started and create a private knowledge base."}
@@ -102,7 +102,7 @@ export const EmptyChatState: React.FC<EmptyChatStateProps> = ({
       {hasWebsites ? (
         <button 
           onClick={handleNewChat}
-          className="flex items-center gap-2 px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium transition-colors hover:scale-[1.02] active:scale-[0.98]"
+          className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors hover:scale-[1.02] active:scale-[0.98]"
         >
           <Plus className="w-5 h-5" />
           Start a new chat
@@ -110,7 +110,7 @@ export const EmptyChatState: React.FC<EmptyChatStateProps> = ({
       ) : (
         <button 
           onClick={() => navigate('/workspace/index')}
-          className="flex items-center gap-2 px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium transition-colors hover:scale-[1.02] active:scale-[0.98]"
+          className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors hover:scale-[1.02] active:scale-[0.98]"
         >
           <Plus className="w-5 h-5" />
           Add your first website

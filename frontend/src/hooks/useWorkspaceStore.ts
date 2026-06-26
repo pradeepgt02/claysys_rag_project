@@ -97,9 +97,18 @@ export const useWorkspaceStore = () => {
     });
   }, []);
 
+  const removeWebsite = useCallback((websiteId: string) => {
+    setGlobalState({
+      ...globalState,
+      websites: globalState.websites.filter(w => w.website_id !== websiteId),
+      selectedWebsiteId: globalState.selectedWebsiteId === websiteId ? '' : globalState.selectedWebsiteId,
+    });
+  }, []);
+
   return {
     state,
     addWebsite,
+    removeWebsite,
     setSelectedWebsiteId,
     setSelectedConversationId,
     createConversation,

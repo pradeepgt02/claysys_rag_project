@@ -50,8 +50,23 @@ export const ChatPage: React.FC = () => {
   const handleWebsiteChange = (newWebsiteId: string) => {
     if (!currentChat) return;
 
-    const hasMessages = currentChat.messages.length > 0;
     const newWebsite = state.websites.find(w => w.website_id === newWebsiteId);
+
+    // Check if there are existing chats for this website
+    const existingChats = state.conversations.filter(c => c.website_id === newWebsiteId);
+    if (existingChats.length > 0) {
+      // Sort to get the most recently updated chat for this website
+      const sortedChats = existingChats.sort((a, b) => 
+        new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      );
+      const mostRecentChat = sortedChats[0];
+      
+      setSelectedWebsiteId(newWebsiteId);
+      navigate(`/workspace/chat/${mostRecentChat.id}`);
+      return;
+    }
+
+    const hasMessages = currentChat.messages.length > 0;
 
     if (!hasMessages) {
       // Case A: Current conversation has zero messages
@@ -88,7 +103,7 @@ export const ChatPage: React.FC = () => {
 
       // Show toast
       const domainName = newWebsite ? (newWebsite.domain || newWebsite.source_url) : 'website';
-      showToast(`Started a new chat for ${domainName} to keep conversations separate.`);
+      showToast(`Started a new chat for ${domainName}.`);
     }
   };
 
@@ -243,6 +258,10 @@ export const ChatPage: React.FC = () => {
         return;
       }
 
+      if (res.success === false && res.message === "Quota exceeded.") {
+        setChatError("The search service is temporarily busy. Please wait a few seconds and try again.");
+      }
+
       const isDisplayable = !!res.answer || res.used_context_fallback === true;
 
       if (isDisplayable) {
@@ -254,6 +273,8 @@ export const ChatPage: React.FC = () => {
           created_at: new Date().toISOString(),
           sources: res.sources,
           used_context_fallback: res.used_context_fallback,
+          generator: res.generator,
+          is_grounded: res.is_grounded,
         };
         
         updateConversation(activeConversation.id, (conv) => ({
@@ -268,7 +289,9 @@ export const ChatPage: React.FC = () => {
     } catch (err: any) {
       setChatError(err.message || 'An error occurred while calling the chatbot API.');
     } finally {
-      setIsChatting(false);
+      setTimeout(() => {
+        setIsChatting(false);
+      }, 2000);
     }
   };
 
@@ -283,27 +306,27 @@ export const ChatPage: React.FC = () => {
       />
 
       {import.meta.env.DEV && currentChat && (
-        <div className="bg-slate-900 border-b border-white/5 px-6 py-1 text-[10px] text-slate-500 font-mono shrink-0 select-none">
+        <div className="bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-white/5 px-6 py-1 text-[10px] text-slate-500 font-mono shrink-0 select-none">
           Active Index: {currentChat.website_id || 'None'}
         </div>
       )}
 
       {currentChat.legacy_mixed && (
-        <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-2.5 text-amber-400 text-xs flex items-center justify-between shrink-0 font-medium select-none text-center">
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-2.5 text-amber-600 dark:text-amber-400 text-xs flex items-center justify-between shrink-0 font-medium select-none text-center">
           <span>This is an older mixed-source conversation. Create a new chat for clean website-specific answers.</span>
         </div>
       )}
       
       {toast && (
-        <div className="absolute top-20 right-6 z-40 bg-violet-600 border border-violet-500 text-white px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-3 backdrop-blur-md text-xs font-semibold animate-fade-in transition-all duration-300">
+        <div className="absolute top-20 right-6 z-40 bg-blue-600 border border-blue-500 text-white px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-3 backdrop-blur-md text-xs font-semibold animate-fade-in transition-all duration-300">
           {toast}
         </div>
       )}
 
       {chatError && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 max-w-md w-full bg-rose-500/10 border border-rose-500/20 text-rose-400 px-4 py-3 rounded-xl shadow-2xl flex items-start gap-3 backdrop-blur-md">
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 max-w-md w-full bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400 px-4 py-3 rounded-xl shadow-2xl flex items-start gap-3 backdrop-blur-md">
           <span className="text-sm font-medium">{chatError}</span>
-          <button onClick={() => setChatError(null)} className="ml-auto text-rose-400 hover:text-rose-300">
+          <button onClick={() => setChatError(null)} className="ml-auto text-rose-500 hover:text-rose-600 dark:text-rose-400 dark:hover:text-rose-300">
             &times;
           </button>
         </div>
@@ -324,8 +347,8 @@ export const ChatPage: React.FC = () => {
       )}
 
       {currentChat.legacy_mixed ? (
-        <div className="p-4 bg-[#030712] border-t border-white/5 w-full shrink-0 flex items-center justify-center select-none animate-fade-in">
-          <div className="text-center py-2.5 px-4 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-xl text-xs font-medium">
+        <div className="p-4 bg-slate-50 dark:bg-[#030712] border-t border-slate-200 dark:border-white/5 w-full shrink-0 flex items-center justify-center select-none animate-fade-in">
+          <div className="text-center py-2.5 px-4 bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 rounded-xl text-xs font-medium">
             This conversation is legacy and contains mixed sources. Please click "New chat" to ask questions.
           </div>
         </div>

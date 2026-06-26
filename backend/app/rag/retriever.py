@@ -7,7 +7,7 @@ parent_dir = Path(__file__).resolve().parent.parent.parent
 if str(parent_dir) not in sys.path:
     sys.path.insert(0, str(parent_dir))
 
-from app.gemini_client import create_embedding
+from app.services.embeddings import create_embedding
 from app.rag.vector_store import WebsiteVectorStore
 
 def retrieve_relevant_chunks(
@@ -49,16 +49,26 @@ def retrieve_relevant_chunks(
         }
 
     try:
-        # Load local vector store
-        store = WebsiteVectorStore(website_id)
-        if not store.load() or not store.is_ready():
+        try:
+            # Load local vector store
+            store = WebsiteVectorStore(website_id)
+            if not store.load() or not store.is_ready():
+                return {
+                    "success": False,
+                    "website_id": website_id,
+                    "question": question,
+                    "results_count": 0,
+                    "results": [],
+                    "message": "No indexed website data found for this website_id."
+                }
+        except ValueError as ve:
             return {
                 "success": False,
                 "website_id": website_id,
                 "question": question,
                 "results_count": 0,
                 "results": [],
-                "message": "No indexed website data found for this website_id."
+                "message": str(ve)
             }
 
         # Generate question embedding vector (using RETRIEVAL_QUERY task configuration)
@@ -69,6 +79,7 @@ def retrieve_relevant_chunks(
                 search_query += " download install installer source code"
             
             query_emb = create_embedding(search_query, task_type="retrieval_query")
+
         except Exception as e:
             return {
                 "success": False,
@@ -102,6 +113,15 @@ def retrieve_relevant_chunks(
         # distances and indices are returned as 2D arrays of shape (1, top_k)
         distances, indices = store.index.search(normalized_query, top_k)
 
+        # Determine index metric type to apply correct similarity formula
+        is_ip = True
+        import faiss
+        if hasattr(store.index, "metric_type"):
+            if store.index.metric_type == faiss.METRIC_L2:
+                is_ip = False
+        elif "IndexFlatL2" in type(store.index).__name__:
+            is_ip = False
+
         results = []
         for idx_in_batch, doc_idx in enumerate(indices[0]):
             # Ignore invalid positions returned by FAISS (e.g. -1 means not enough index vectors)
@@ -109,7 +129,14 @@ def retrieve_relevant_chunks(
                 continue
 
             meta = store.metadata_store[doc_idx]
-            similarity_score = float(distances[0][idx_in_batch])
+            raw_val = float(distances[0][idx_in_batch])
+            
+            if is_ip:
+                distance = 1.0 - raw_val
+                similarity_score = 1.0 - distance
+            else:
+                distance = raw_val
+                similarity_score = 1.0 / (1.0 + distance)
 
             results.append({
                 "chunk_id": meta.get("chunk_id", ""),
@@ -120,6 +147,7 @@ def retrieve_relevant_chunks(
                 "content_type": meta.get("content_type", "html"),
                 "page_number": meta.get("page_number"),
                 "chunk_index": meta.get("chunk_index", 0),
+                "distance": round(distance, 4),
                 "similarity_score": round(similarity_score, 4),
                 "score": round(similarity_score, 4)
             })

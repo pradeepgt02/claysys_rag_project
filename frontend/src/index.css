@@ -4,7 +4,7 @@
 
 @layer base {
   body {
-    @apply bg-dark-900 text-slate-100 antialiased selection:bg-violet-600 selection:text-white;
+    @apply bg-slate-50 text-slate-900 dark:bg-dark-900 dark:text-slate-100 antialiased selection:bg-blue-600 selection:text-white transition-colors duration-200;
   }
 }
 

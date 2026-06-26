@@ -1,0 +1,8 @@
+{
+  "website_id": "hackerrank_com_fa7ddd5b",
+  "dimension": 384,
+  "vector_count": 36,
+  "storage_path": "C:\\Users\\prade\\OneDrive\\Desktop\\Rag_drive\\backend\\data\\indexes\\hackerrank_com_fa7ddd5b",
+  "embedding_provider": "sentence_transformers",
+  "embedding_model": "all-MiniLM-L6-v2"
+}

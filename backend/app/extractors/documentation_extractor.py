@@ -60,8 +60,8 @@ def extract_documentation_sections(html: str) -> list[dict]:
                 # Ensure the text node is not inside the current heading tag itself
                 if not isinstance(curr, Comment) and heading not in curr.parents:
                     val = curr.string
-                    if val:
-                        section_pieces.append(val)
+                    if val and val.strip():
+                        section_pieces.append(val + " ")
             elif curr.name in ["p", "div", "br", "li", "h1", "h2", "h3", "h4", "h5", "h6", "tr", "td", "th"]:
                 # Insert newline boundaries for block elements to preserve line breaks
                 section_pieces.append("\n")
