@@ -52,6 +52,19 @@ Generates grounded answers using retrieved context.
 
 ---
 
+## Environment Setup
+
+Before running the backend, you must configure your environment variables:
+
+1. Copy the example environment file to create your own local `.env` file:
+   ```bash
+   cp .env.example .env
+   ```
+2. Open `.env` and add your own real API keys (e.g., Groq, Gemini).
+3. **Important:** Never commit `backend/.env` to source control. It is already added to `.gitignore` to prevent leaking secrets.
+
+---
+
 ## Run
 
 ```bash

@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 # Define the base directory of the backend folder
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Load environment variables from the .env file if it exists
+# Load environment variables from the .env file
 env_path = BASE_DIR / ".env"
 load_dotenv(dotenv_path=env_path, override=True)
 
@@ -13,14 +13,15 @@ load_dotenv(dotenv_path=env_path, override=True)
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_FALLBACK_API_KEY = os.getenv("GROQ_FALLBACK_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_EMBEDDING_MODEL = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001")
 
 # Validate configuration
-if not GROQ_API_KEY or GROQ_API_KEY.strip() == "" or GROQ_API_KEY == "your_groq_api_key_here":
+if not GROQ_API_KEY or GROQ_API_KEY.strip() == "" or GROQ_API_KEY == "your_groq_api_key":
     raise ValueError(
         "Configuration Error: GROQ_API_KEY is missing or invalid in your .env file.\n"
-        "Please perform the following steps:\n"
-        "  1. Copy '.env.example' to '.env' inside the 'backend' folder.\n"
-        "  2. Replace 'your_groq_api_key_here' with your real API key from Groq Console."
+        "Please ensure backend/.env contains your real API keys."
     )
 
 # Playwright Fallback Configurations
