@@ -12,7 +12,7 @@ load_dotenv(dotenv_path=env_path, override=True)
 # Retrieve configuration variables
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_FALLBACK_API_KEY = os.getenv("GROQ_FALLBACK_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama3-8b-8192")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 GEMINI_EMBEDDING_MODEL = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001")
