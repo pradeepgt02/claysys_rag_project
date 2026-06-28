@@ -28,14 +28,19 @@ async def startup_event():
     print(f"INFO:     GROQ_API_KEY is configured: {bool(config.GROQ_API_KEY)}")
 
 # Configure CORS origins
+import os
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
+cors_env = os.getenv("CORS_ORIGINS", "")
+if cors_env:
+    origins.extend([o.strip() for o in cors_env.split(",") if o.strip()])
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

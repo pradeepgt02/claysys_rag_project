@@ -1,6 +1,6 @@
 import { IngestRequest, IngestResponse, ChatRequest, ChatResponse, IndexedPagesResponse } from '../types/webmind';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+const API_URL = import.meta.env.VITE_API_URL;
 
 class ApiError extends Error {
   constructor(message: string, public status?: number) {
@@ -29,14 +29,14 @@ export const webmindApi = {
   ): Promise<IngestResponse> {
     let response: Response;
     try {
-      response = await fetch(`${API_BASE_URL}/ingest`, {
+      response = await fetch(`${API_URL}/ingest`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
     } catch (error: any) {
       if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-        throw new ApiError('Cannot connect to the backend server. Please verify the backend is running at http://127.0.0.1:8000 and CORS is configured.');
+        throw new ApiError(`Cannot connect to the backend server at ${API_URL}. Please verify it is running and CORS is configured.`);
       }
       throw new ApiError(error.message || 'An unexpected error occurred while contacting the server.');
     }
@@ -113,7 +113,7 @@ export const webmindApi = {
    */
   async chat(chatData: ChatRequest): Promise<ChatResponse> {
     try {
-      const response = await fetch(`${API_BASE_URL}/chat`, {
+      const response = await fetch(`${API_URL}/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -161,7 +161,7 @@ export const webmindApi = {
    */
   async getIndexedPages(websiteId: string): Promise<IndexedPagesResponse> {
     try {
-      const response = await fetch(`${API_BASE_URL}/websites/${websiteId}/indexed-pages`, {
+      const response = await fetch(`${API_URL}/websites/${websiteId}/indexed-pages`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -196,7 +196,7 @@ export const webmindApi = {
    */
   async deleteWebsite(websiteId: string): Promise<{ success: boolean; message: string }> {
     try {
-      const response = await fetch(`${API_BASE_URL}/websites/${websiteId}`, {
+      const response = await fetch(`${API_URL}/websites/${websiteId}`, {
         method: 'DELETE',
       });
 
