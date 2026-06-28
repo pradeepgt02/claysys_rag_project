@@ -31,4 +31,4 @@ WORKDIR /app/backend
 # The PORT environment variable is set by Hugging Face
 ENV HOST=0.0.0.0
 
-CMD ["sh", "-c", "uvicorn app.main:app --host $HOST --port $PORT"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-7860}"]
