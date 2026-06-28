@@ -46,33 +46,6 @@ async def read_root():
     """Root endpoint to check if the backend service is running."""
     return {"message": "WebMind backend is running"}
 
-@app.get("/fix_git2")
-async def fix_git2():
-    import subprocess
-    repo_dir = "c:/Users/prade/OneDrive/Desktop/Rag_drive"
-    commands = [
-        f"cd {repo_dir} && git checkout main",
-        f"cd {repo_dir} && git branch -D temp-deploy",
-        f"cd {repo_dir} && git checkout --orphan temp-deploy",
-        f"cd {repo_dir} && git rm -rf --cached .",
-        f"cd {repo_dir} && git add .",
-        f"cd {repo_dir} && git commit -m \"Clean history for Hugging Face deployment\"",
-        f"cd {repo_dir} && git branch -D main",
-        f"cd {repo_dir} && git branch -m main",
-        f"cd {repo_dir} && git push origin main --force"
-    ]
-    output = []
-    for cmd in commands:
-        try:
-            # We ignore errors on 'git branch -D temp-deploy' if it doesn't exist
-            out = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
-            output.append(out.decode('utf-8', errors='ignore'))
-        except subprocess.CalledProcessError as e:
-            output.append(f"ERROR ({cmd}): {e.output.decode('utf-8', errors='ignore')}")
-            if "temp-deploy" not in cmd:  # don't fail if we just couldn't delete temp-deploy
-                pass
-    return {"status": "success", "output": output}
-
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint evaluating both backend and Groq API connectivity."""
