@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { WorkspaceState, IndexedWebsite, ChatConversation, ChatMessage } from '../types/webmind';
+import { WorkspaceState, IndexedWebsite, ChatConversation } from '../types/webmind';
 import { loadWorkspaceState, saveWorkspaceState } from '../utils/workspaceStorage';
 
 // We use a singleton event target to synchronize state across components

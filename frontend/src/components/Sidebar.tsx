@@ -1,5 +1,5 @@
 import React from 'react';
-import { Brain, Plus, CheckCircle2, AlertCircle, Loader2, FileText, Database, ShieldAlert } from 'lucide-react';
+import { Brain, Plus, CheckCircle2, Loader2, FileText, Database, ShieldAlert } from 'lucide-react';
 import { IndexedWebsite } from '../types/webmind';
 
 interface SidebarProps {

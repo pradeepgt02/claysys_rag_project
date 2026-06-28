@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Search, CheckCircle2, ExternalLink, Loader2, ShieldAlert } from 'lucide-react';
 import { webmindApi } from '../api/webmindApi';
-import { IndexedPageInfo, IndexedPagesResponse } from '../types/webmind';
+import { IndexedPagesResponse } from '../types/webmind';
 
 interface IndexedPagesDrawerProps {
   isOpen: boolean;

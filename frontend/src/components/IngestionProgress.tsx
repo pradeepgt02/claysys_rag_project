@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { Loader2, CheckCircle2 } from 'lucide-react';
 
 interface IngestionProgressProps {
   url: string;

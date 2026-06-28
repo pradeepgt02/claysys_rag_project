@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrainCircuit } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 export const LandingNavbar: React.FC = () => {
   const navigate = useNavigate();

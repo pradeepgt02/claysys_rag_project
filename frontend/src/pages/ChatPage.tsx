@@ -5,7 +5,7 @@ import { EmptyChatState } from '../components/EmptyChatState';
 import { ChatConversation as ChatConversationComponent } from '../components/ChatConversation';
 import { ChatComposer } from '../components/ChatComposer';
 import { webmindApi } from '../api/webmindApi';
-import { ChatMessage, ChatConversation } from '../types/webmind';
+import { ChatMessage } from '../types/webmind';
 import { useWorkspaceStore } from '../hooks/useWorkspaceStore';
 import { IndexedPagesDrawer } from '../components/IndexedPagesDrawer';
 

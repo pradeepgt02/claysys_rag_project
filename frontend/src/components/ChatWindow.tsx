@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Globe, Database, HelpCircle, ShieldAlert } from 'lucide-react';
+import { Send, Loader2, Globe, Database, ShieldAlert } from 'lucide-react';
 import { IndexedWebsite, ChatMessage as ChatMessageType } from '../types/webmind';
 import { ChatMessage } from './ChatMessage';
 import { EmptyState } from './EmptyState';

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Database, CheckCircle2, Loader2, AlertCircle, Plus, Trash2, RefreshCw } from 'lucide-react';
+import { Database, Loader2, AlertCircle, Plus, Trash2, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useWorkspaceStore } from '../hooks/useWorkspaceStore';
 import { webmindApi } from '../api/webmindApi';
@@ -85,10 +85,10 @@ export const KnowledgeBaseList: React.FC = () => {
                         <div className="w-2 h-2 rounded-full bg-emerald-500" title="Indexed" />
                       )}
                       {site.status === 'processing' && (
-                        <Loader2 className="w-3 h-3 text-amber-500 animate-spin" title="Processing" />
+                        <div title="Processing"><Loader2 className="w-3 h-3 text-amber-500 animate-spin" /></div>
                       )}
                       {site.status === 'failed' && (
-                        <AlertCircle className="w-3 h-3 text-rose-500" title="Failed" />
+                        <div title="Failed"><AlertCircle className="w-3 h-3 text-rose-500" /></div>
                       )}
                     </div>
                     <button
