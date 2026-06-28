@@ -1,6 +1,6 @@
 import { IngestRequest, IngestResponse, ChatRequest, ChatResponse, IndexedPagesResponse } from '../types/webmind';
 
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = import.meta.env.VITE_API_URL || 'https://pradeep002-claysys-rag-project.hf.space';
 
 class ApiError extends Error {
   constructor(message: string, public status?: number) {
