@@ -133,7 +133,9 @@ class WebsiteVectorStore:
         # Normalize vectors to L2 norm (making IP index equivalent to Cosine Similarity)
         norms = np.linalg.norm(embeddings_matrix, axis=1, keepdims=True)
         norms = np.where(norms == 0, 1e-10, norms)  # Guard against divide-by-zero
-        normalized_matrix = embeddings_matrix / norms
+        
+        # Explicitly cast to float32 and ensure C-contiguity for FAISS
+        normalized_matrix = np.ascontiguousarray(embeddings_matrix / norms, dtype=np.float32)
 
         # Add normalized vectors to FAISS
         self.index.add(normalized_matrix)
